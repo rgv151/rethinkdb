@@ -20,6 +20,7 @@ PY3 = sys.version > "3"
 json_read_chunk_size = 32 * 1024
 json_max_buffer_size = 128 * 1024 * 1024
 max_nesting_depth = 100
+default_batch_size = 200
 
 from . import utils_common
 r = utils_common.r
@@ -106,7 +107,7 @@ class SourceFile(object):
         # - add read percentage
         if self.__bytes_size.value <= 0 or self.__bytes_size.value <= self.__bytes_read.value:
             completed += 1.0
-        elif self.__bytes_read < 0 and self.__total_rows.value >= 0:
+        elif self.__bytes_read.value < 0 and self.__total_rows.value >= 0:
             # done by rows read
             if self.__rows_read > 0:
                 completed += float(self.__rows_read) / float(self.__total_rows.value)
@@ -173,7 +174,7 @@ def parse_options(argv, prog=None):
     parser.add_option("--force",             dest="force",      action="store_true",  default=False,  help="import even if a table already exists, overwriting duplicate primary keys")
     
     parser.add_option("--writers-per-table", dest="writers",    metavar="WRITERS",    default=multiprocessing.cpu_count(), help=optparse.SUPPRESS_HELP, type="pos_int")
-    parser.add_option("--batch-size",        dest="batch_size", metavar="BATCH",      default=200,                         help=optparse.SUPPRESS_HELP, type="pos_int")
+    parser.add_option("--batch-size",        dest="batch_size", metavar="BATCH",      default=default_batch_size,          help=optparse.SUPPRESS_HELP, type="pos_int")
     
     # Replication settings
     replicationOptionsGroup = optparse.OptionGroup(parser, "Replication Options")
@@ -356,7 +357,7 @@ def parse_options(argv, prog=None):
 
 # This is run for each client requested, and accepts tasks from the reader processes
 def table_writer(tables, options, work_queue, error_queue, warning_queue, exit_event):
-    signal.signal(signal.SIGINT, signal.SIG_IGN) # workers should not get these
+    signal.signal(signal.SIGINT, signal.SIG_IGN) # workers should ignore these
     db = table = batch = None
     
     try:
@@ -784,8 +785,8 @@ def import_tables(options, files_info):
             writer = multiprocessing.Process(
                 target=table_writer, name="table writer %d" % i,
                 kwargs={
-                    "tables":tables, "options":options, "work_queue":work_queue,
-                    "error_queue":error_queue, "warning_queue":warning_queue,
+                    "tables":tables, "options":options,
+                    "work_queue":work_queue, "error_queue":error_queue, "warning_queue":warning_queue,
                     "exit_event":exit_event
                 }
             )
@@ -862,7 +863,7 @@ def import_tables(options, files_info):
         while not error_queue.empty():
             errors.append(error_queue.get())
         
-        # - If we were successful, make sure 100% progress is reported
+        # - if successful, make sure 100% progress is reported
         if len(errors) == 0 and not interrupt_event.is_set() and not options.quiet:
             utils_common.print_progress(1.0, indent=2)
         

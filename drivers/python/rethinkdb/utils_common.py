@@ -2,23 +2,12 @@
 
 from __future__ import print_function
 
-import collections, copy, distutils.version, getpass, inspect, optparse, os, re, socket, string, sys, threading
-import traceback
+import collections, copy, distutils.version, getpass, inspect, optparse, os, re, sys, threading
+
 from . import net
 r = net.Connection._r
 
 _connection_info = None # set by CommonOptionsParser
-
-# This file contains common functions used by the import/export/dump/restore scripts
-
-# This function is used to wrap rethinkdb calls to recover from connection errors
-# The first argument to the function is an output parameter indicating if progress
-# has been made since the last call.  This is passed as an array so it works as an
-# output parameter. The first item in the array is compared each attempt to check
-# if progress has been made.
-# Using this wrapper, the given function will be called until 5 connection errors
-# occur in a row with no progress being made.  Care should be taken that the given
-# function will terminate as long as the progress parameter is changed.
 
 def retryQuery(name, query, times=5, runOptions=None):
     '''Try a query multiple times to guard against bad connections'''
@@ -59,7 +48,7 @@ def print_progress(ratio, indent=0, read=None, write=None):
         "undone":    " " * (total_width - done_width),
         "percent":   int(100 * ratio),
         "readRate":  (" r: %d" % read) if read is not None else '',
-        "writeRate": (" r: %d" % write) if write is not None else ''
+        "writeRate": (" w: %d" % write) if write is not None else ''
     })
     sys.stdout.flush()
 
@@ -95,7 +84,7 @@ class CommonOptionsParser(optparse.OptionParser, object):
                 raise optparse.OptionValueError('Option %s value is not a file: %r' % (opt, value))
         
         def checkDbTableOption(option, opt_str, value):
-            res = self._tableNameRegex.match(value)
+            res = _tableNameRegex.match(value)
             if not res:
                 raise optparse.OptionValueError('Invalid db or db.table name: %s' % value)
             if res.group('db') == 'rethinkdb':
@@ -105,7 +94,7 @@ class CommonOptionsParser(optparse.OptionParser, object):
         def checkPoitiveInt(option, opt_str, value):
             try:
                 intValue = int(value)
-                assert value >= 1
+                assert intValue >= 1
                 return intValue
             except (AssertionError, ValueError):
                 raise optparse.OptionValueError('%s value must be an integer greater that 1: %s' % (opt_str, value))
